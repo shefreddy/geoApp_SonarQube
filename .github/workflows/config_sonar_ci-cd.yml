@@ -211,3 +211,98 @@ jobs:
      #       timeoutMinutes: 5
 
      #       sleepTime: 10  # Seconds between status checks
+  # .github/workflows/config_sonar_ci-cd.yml
+
+  docker:
+
+   name: Docker Build & Push to ECR
+
+   runs-on: ubuntu-latest
+
+   needs: sonar  # ensures this runs after 'sonar'
+
+   steps:
+
+     - name: Checkout Code
+
+       uses: actions/checkout@v4
+
+       with:
+
+         fetch-depth: 0
+
+ 
+
+     # Use OIDC Role for this repo
+
+     - name: Configure AWS Credentials
+
+       uses: aws-actions/configure-aws-credentials@v4
+
+       with:
+
+         role-to-assume: ${{ secrets.ECR_ACESS_ROLE }}
+
+         aws-region: ${{ secrets.AWS_REGION }}
+
+ 
+
+     # Download the JAR file artifact from the build job
+
+     - name: Download JAR file artifact
+
+       uses: actions/download-artifact@v4
+
+       with:
+
+         name: geo_app-jar
+
+         path: target/
+
+ 
+
+     - name: Login to Amazon ECR
+
+       id: login-ecr
+
+       uses: aws-actions/amazon-ecr-login@v2
+
+ 
+
+     - name: Build Docker image
+
+       run: |
+
+        docker build -t geo_app:${{ github.sha }} .
+
+ 
+
+     - name: Tag image for ECR
+
+       run: |
+
+        APP_VERSION=`grep -m2 '<version>' pom.xml | tail -1 | grep -oP '(?<=>).*(?=<)'`
+
+        echo $APP_VERSION
+
+ 
+
+        docker tag geo_app:${{ github.sha }} ${{ steps.login-ecr.outputs.registry }}/geo_app:${{ github.sha }}
+
+        docker tag geo_app:${{ github.sha }} ${{ steps.login-ecr.outputs.registry }}/geo_app:$APP_VERSION
+
+       
+
+ 
+
+     - name: Push Docker image to ECR
+
+       run: |
+
+        APP_VERSION=`grep -m2 '<version>' pom.xml | tail -1 | grep -oP '(?<=>).*(?=<)'`
+
+        echo $APP_VERSION
+
+        docker push ${{ steps.login-ecr.outputs.registry }}/geo_app:${{ github.sha }}
+
+        docker push ${{ steps.login-ecr.outputs.registry }}/geo_app:$APP_VERSION
